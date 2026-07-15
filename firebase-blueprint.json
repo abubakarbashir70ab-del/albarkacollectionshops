@@ -1,0 +1,31 @@
+{
+  "collections": [
+    {
+      "name": "products",
+      "fields": [
+        { "name": "name", "type": "string" },
+        { "name": "category", "type": "string" },
+        { "name": "price", "type": "number" },
+        { "name": "description", "type": "string" },
+        { "name": "imageUrl", "type": "string" },
+        { "name": "createdAt", "type": "timestamp" },
+        { "name": "updatedAt", "type": "timestamp" }
+      ],
+      "rules": {
+        "read": "true",
+        "write": "request.auth != null"
+      }
+    },
+    {
+      "name": "categories",
+      "fields": [
+        { "name": "name", "type": "string" },
+        { "name": "slug", "type": "string" }
+      ],
+      "rules": {
+        "read": "true",
+        "write": "request.auth != null"
+      }
+    }
+  ]
+}

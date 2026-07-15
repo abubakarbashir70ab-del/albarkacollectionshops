@@ -1,0 +1,6 @@
+{
+  "name": "Albarka Collection",
+  "description": "An elegant luxury online boutique offering curated home decor, kitchen materials, bedding, travel gear, and baby essentials.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
