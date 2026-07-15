@@ -59,7 +59,7 @@ export function Footer() {
         </div>
       </div>
       <div className="flex justify-center pt-8 pb-2 opacity-5 hover:opacity-100 transition-opacity">
-        <a href="/admin" className="text-[10px] text-on-surface-variant cursor-default">Administration</a>
+        <Link to="/admin" className="text-[10px] text-on-surface-variant cursor-default">Administration</Link>
       </div>
     </footer>
   );

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { db } from '../lib/firebase';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import AnimatedPage from '../components/AnimatedPage';
@@ -56,9 +57,9 @@ export default function Checkout() {
           <p className="font-body-md text-on-surface-variant mb-6">
             Thank you, {name}! Your order and payment receipt have been received successfully. We will contact you shortly.
           </p>
-          <a href="/" className="inline-block bg-primary text-on-primary px-8 py-3 uppercase tracking-widest font-label-md hover:bg-primary/90 transition-colors">
+          <Link to="/" className="inline-block bg-primary text-on-primary px-8 py-3 uppercase tracking-widest font-label-md hover:bg-primary/90 transition-colors">
             Continue Shopping
-          </a>
+          </Link>
         </div>
       </AnimatedPage>
     );
