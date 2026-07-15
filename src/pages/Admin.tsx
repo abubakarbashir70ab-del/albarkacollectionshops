@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../context/AuthContext';
 import { db } from '../lib/firebase';
 import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import AnimatedPage from '../components/AnimatedPage';
@@ -32,7 +31,6 @@ interface Order {
 }
 
 export default function Admin() {
-  const { user, signInWithGoogle, signOut } = useAuth();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
@@ -51,10 +49,10 @@ export default function Admin() {
   const [confirmingDeleteCategoryId, setConfirmingDeleteCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (user && isAuthenticatedWithPassword) {
+    if (isAuthenticatedWithPassword) {
       fetchData();
     }
-  }, [user, isAuthenticatedWithPassword]);
+  }, [isAuthenticatedWithPassword]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -242,34 +240,16 @@ export default function Admin() {
     );
   }
 
-  if (!user) {
-    return (
-      <div className="pt-32 pb-24 px-margin-desktop min-h-[70vh] flex flex-col items-center justify-center">
-        <h1 className="font-headline-lg text-4xl mb-6">Admin Access</h1>
-        <p className="font-body-md text-on-surface-variant mb-8 text-center max-w-md">
-          Please sign in with your administrator account to access the dashboard.
-        </p>
-        <button 
-          onClick={signInWithGoogle}
-          className="bg-primary text-on-primary px-8 py-4 uppercase tracking-widest font-label-md hover:bg-primary/90 transition-colors"
-        >
-          Sign In with Google
-        </button>
-      </div>
-    );
-  }
-
   return (
     <AnimatedPage className="pt-32 pb-24 px-margin-desktop min-h-screen">
       <div className="flex justify-between items-center mb-12">
         <h1 className="font-headline-lg text-4xl">Admin Dashboard</h1>
         <div className="flex items-center gap-4">
-          <span className="font-body-md text-on-surface-variant">{user.email}</span>
           <button 
-            onClick={signOut}
+            onClick={() => setIsAuthenticatedWithPassword(false)}
             className="border border-outline px-4 py-2 uppercase tracking-widest font-label-md text-xs hover:bg-surface-variant transition-colors"
           >
-            Sign Out
+            Lock Dashboard
           </button>
         </div>
       </div>
