@@ -477,7 +477,7 @@ export default function Home() {
                   <div>
                     <h4 className="font-label-lg text-on-surface">Get in Touch</h4>
                     <p className="font-body-md text-on-surface-variant mt-1">
-                      Phone: <a href="tel:+2348033239248" className="hover:text-primary transition-colors">+234 803 323 9248</a><br />
+                      Phone: <a href="tel:+2348032896303" className="hover:text-primary transition-colors">+234 803 289 6303</a><br />
                       Email: <a href="mailto:info@albarkacollection.com" className="hover:text-primary transition-colors">info@albarkacollection.com</a>
                     </p>
                   </div>

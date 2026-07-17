@@ -6,6 +6,7 @@ import AnimatedPage from '../components/AnimatedPage';
 
 export default function Checkout() {
   const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
   const [orderDetails, setOrderDetails] = useState('');
@@ -26,12 +27,13 @@ export default function Checkout() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone || !orderDetails) return;
+    if (!name || !email || !phone || !orderDetails) return;
 
     setIsSubmitting(true);
     try {
-      await addDoc(collection(db, 'orders'), {
+      const docRef = await addDoc(collection(db, 'orders'), {
         name,
+        email,
         phone,
         address,
         orderDetails,
@@ -39,6 +41,27 @@ export default function Checkout() {
         status: 'pending',
         createdAt: serverTimestamp(),
       });
+
+      // Send automated email notification via background api trigger
+      try {
+        await fetch('/api/send-order-email', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            id: docRef.id,
+            name,
+            email,
+            phone,
+            address,
+            orderDetails,
+            status: 'pending',
+            type: 'created'
+          })
+        });
+      } catch (emailErr) {
+        console.error('Failed to send automated notification email:', emailErr);
+      }
+
       setIsSuccess(true);
     } catch (error) {
       console.error('Error placing order:', error);
@@ -87,6 +110,18 @@ export default function Checkout() {
           </div>
 
           <div>
+            <label className="block font-label-md text-xs uppercase tracking-widest text-on-surface-variant mb-2">Email Address *</label>
+            <input 
+              required 
+              type="email" 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)} 
+              className="w-full border border-outline bg-surface p-3 font-body-md focus:border-primary focus:outline-none" 
+              placeholder="e.g. customer@example.com"
+            />
+          </div>
+
+          <div>
             <label className="block font-label-md text-xs uppercase tracking-widest text-on-surface-variant mb-2">Phone Number *</label>
             <input 
               required 
@@ -94,7 +129,7 @@ export default function Checkout() {
               value={phone} 
               onChange={(e) => setPhone(e.target.value)} 
               className="w-full border border-outline bg-surface p-3 font-body-md focus:border-primary focus:outline-none" 
-              placeholder="e.g. 08033239248"
+              placeholder="e.g. 08032896303"
             />
           </div>
 

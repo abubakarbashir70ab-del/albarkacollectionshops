@@ -4,6 +4,7 @@ import { Footer } from './Footer';
 import Cursor from './Cursor';
 import Background from './Background';
 import WhatsAppWidget from './WhatsAppWidget';
+import PromotionalVideoWidget from './PromotionalVideoWidget';
 
 export function Layout() {
   return (
@@ -18,6 +19,7 @@ export function Layout() {
       </main>
       <Footer />
       <WhatsAppWidget />
+      <PromotionalVideoWidget />
     </>
   );
 }

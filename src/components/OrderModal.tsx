@@ -137,7 +137,7 @@ export default function OrderModal({ isOpen, onClose, productName, productPrice,
                       value={phone} 
                       onChange={(e) => setPhone(e.target.value)} 
                       className="w-full border border-outline rounded bg-surface p-2.5 font-body-md focus:border-primary focus:outline-none" 
-                      placeholder="e.g. 08033239248"
+                      placeholder="e.g. 08032896303"
                     />
                   </div>
 

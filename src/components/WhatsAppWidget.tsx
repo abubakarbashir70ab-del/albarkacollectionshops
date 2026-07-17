@@ -12,7 +12,7 @@ export default function WhatsAppWidget() {
     return () => clearTimeout(timer);
   }, []);
 
-  const phoneNumber = '2348033239248';
+  const phoneNumber = '2348032896303';
   const defaultMessage = 'Hello, I would like to make an inquiry.';
 
   const whatsappUrl = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(defaultMessage)}`;

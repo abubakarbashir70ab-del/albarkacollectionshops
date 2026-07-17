@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../lib/firebase';
-import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, getDocs, addDoc, deleteDoc, doc, updateDoc, serverTimestamp, getDoc, setDoc } from 'firebase/firestore';
 import AnimatedPage from '../components/AnimatedPage';
 
 interface Product {
@@ -34,8 +34,17 @@ export default function Admin() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'orders'>('products');
+  const [activeTab, setActiveTab] = useState<'products' | 'categories' | 'orders' | 'video'>('products');
   const [loading, setLoading] = useState(false);
+
+  // Video Ad State
+  const [videoUrl, setVideoUrl] = useState('');
+  const [videoTitle, setVideoTitle] = useState('');
+  const [videoDescription, setVideoDescription] = useState('');
+  const [videoIsActive, setVideoIsActive] = useState(true);
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [videoMessage, setVideoMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
 
   const emptyProduct = { name: '', category: '', price: '', description: '', imageUrl: '' };
   const [newProducts, setNewProducts] = useState([emptyProduct]);
@@ -84,11 +93,101 @@ export default function Admin() {
       });
       ords.sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0));
       setOrders(ords);
+
+      // Fetch promotional video settings
+      try {
+        const promoSnap = await getDoc(doc(db, 'promotions', 'ad_video'));
+        if (promoSnap.exists()) {
+          const data = promoSnap.data();
+          setVideoUrl(data.videoUrl || '');
+          setVideoTitle(data.title || '');
+          setVideoDescription(data.description || '');
+          setVideoIsActive(data.isActive !== false);
+        }
+      } catch (err) {
+        console.error("Error fetching promotional video:", err);
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveVideoSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setVideoMessage(null);
+    setLoading(true);
+    try {
+      await setDoc(doc(db, 'promotions', 'ad_video'), {
+        videoUrl,
+        title: videoTitle,
+        description: videoDescription,
+        isActive: videoIsActive,
+        updatedAt: serverTimestamp()
+      });
+      setVideoMessage({ type: 'success', text: 'Promotional video settings updated successfully!' });
+    } catch (err) {
+      console.error("Error saving promotional video settings:", err);
+      setVideoMessage({ type: 'error', text: 'Failed to save settings. Please try again.' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleVideoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Limit size to ~100MB
+    if (file.size > 100 * 1024 * 1024) {
+      alert("The video is too large. Please select a video file under 100MB, or use a YouTube/Vimeo link instead.");
+      return;
+    }
+
+    setUploading(true);
+    setUploadProgress(0);
+    setVideoMessage(null);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', '/api/upload-video', true);
+    xhr.setRequestHeader('Content-Type', file.type);
+
+    // Track real native upload progress!
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) {
+        const percentComplete = Math.round((event.loaded / event.total) * 100);
+        setUploadProgress(percentComplete);
+      }
+    };
+
+    xhr.onload = () => {
+      setUploading(false);
+      setUploadProgress(null);
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const response = JSON.parse(xhr.responseText);
+          if (response.success && response.videoUrl) {
+            setVideoUrl(response.videoUrl);
+            setVideoMessage({ type: 'success', text: 'Video uploaded successfully! Click "Save Video Settings" to save and publish your changes.' });
+          } else {
+            setVideoMessage({ type: 'error', text: response.error || 'Failed to upload video.' });
+          }
+        } catch (err) {
+          setVideoMessage({ type: 'error', text: 'Invalid response from server.' });
+        }
+      } else {
+        setVideoMessage({ type: 'error', text: `Server returned status: ${xhr.status}` });
+      }
+    };
+
+    xhr.onerror = () => {
+      setUploading(false);
+      setUploadProgress(null);
+      setVideoMessage({ type: 'error', text: 'Network connection error during upload.' });
+    };
+
+    xhr.send(file);
   };
 
   const handleDeleteAllProducts = async () => {
@@ -192,6 +291,30 @@ export default function Admin() {
   const handleUpdateOrderStatus = async (id: string, newStatus: string) => {
     try {
       await updateDoc(doc(db, 'orders', id), { status: newStatus });
+      
+      // Find the existing order from state to retrieve customer email and details
+      const order = orders.find(o => o.id === id);
+      if (order && order.email) {
+        try {
+          await fetch('/api/send-order-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              id,
+              name: order.name,
+              email: order.email,
+              phone: order.phone,
+              address: order.address,
+              orderDetails: order.orderDetails,
+              status: newStatus,
+              type: 'updated'
+            })
+          });
+        } catch (emailErr) {
+          console.error("Failed to send automated status update email:", emailErr);
+        }
+      }
+
       fetchData();
     } catch (error) {
       console.error("Error updating order status:", error);
@@ -272,6 +395,12 @@ export default function Admin() {
           onClick={() => setActiveTab('orders')}
         >
           Orders
+        </button>
+        <button 
+          className={`pb-4 uppercase tracking-widest font-label-md ${activeTab === 'video' ? 'border-b-2 border-primary text-primary' : 'text-on-surface-variant hover:text-on-surface'}`}
+          onClick={() => setActiveTab('video')}
+        >
+          Promo Video Ad
         </button>
       </div>
 
@@ -525,6 +654,11 @@ export default function Admin() {
                     </td>
                     <td className="border-b border-outline p-4">
                       <div className="font-medium text-on-surface">{order.name}</div>
+                      {order.email && (
+                        <div className="text-primary text-xs font-mono select-all hover:underline" title="Click to copy email">
+                          {order.email}
+                        </div>
+                      )}
                       <div className="text-on-surface-variant text-xs">{order.phone}</div>
                       <div className="text-on-surface-variant text-xs truncate max-w-[200px]" title={order.address}>{order.address}</div>
                     </td>
@@ -573,6 +707,199 @@ export default function Admin() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      ) : activeTab === 'video' ? (
+        <div className="max-w-4xl mx-auto bg-surface-container-lowest border border-outline rounded-2xl p-6 md:p-8 shadow-sm">
+          <div className="mb-8">
+            <h2 className="font-headline-md text-2xl mb-2 text-on-surface">Manage Promotional Video</h2>
+            <p className="font-body-md text-on-surface-variant text-sm">
+              Configure or upload a professional promo video story that will float elegantly on the bottom-left of the storefront for customers to play.
+            </p>
+          </div>
+
+          {videoMessage && (
+            <div className={`p-4 mb-6 rounded-xl border text-sm ${
+              videoMessage.type === 'success' 
+                ? 'bg-success/10 border-success text-success' 
+                : 'bg-error/10 border-error text-error'
+            }`}>
+              {videoMessage.text}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
+            {/* Left side form */}
+            <form onSubmit={handleSaveVideoSettings} className="lg:col-span-3 space-y-6">
+              <div>
+                <label className="block font-label-md text-xs uppercase tracking-widest text-on-surface-variant mb-2">
+                  Upload Video File
+                </label>
+                <div className="border-2 border-dashed border-outline-variant hover:border-primary/50 transition-colors rounded-2xl p-6 text-center cursor-pointer relative group">
+                  <input 
+                    type="file" 
+                    accept="video/*" 
+                    onChange={handleVideoUpload}
+                    disabled={uploading}
+                    className="absolute inset-0 opacity-0 cursor-pointer"
+                  />
+                  <div className="flex flex-col items-center justify-center gap-2">
+                    <span className="material-symbols-outlined text-3xl text-on-surface-variant group-hover:text-primary transition-colors">
+                      cloud_upload
+                    </span>
+                    <span className="font-label-md text-xs uppercase tracking-widest text-on-surface font-semibold">
+                      {uploading ? 'Processing file...' : 'Choose file or drag here'}
+                    </span>
+                    <span className="text-xs text-on-surface-variant">
+                      Supports MP4, WebM (Max 50MB)
+                    </span>
+                  </div>
+                </div>
+
+                {uploadProgress !== null && (
+                  <div className="mt-4 space-y-2">
+                    <div className="flex justify-between text-xs font-mono text-on-surface-variant">
+                      <span>Uploading video to local stream...</span>
+                      <span>{uploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-surface border border-outline/20 rounded-full h-2 overflow-hidden">
+                      <div 
+                        className="bg-primary h-full transition-all duration-300"
+                        style={{ width: `${uploadProgress}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-center gap-4">
+                <div className="h-[1px] bg-outline-variant/30 flex-1"></div>
+                <span className="text-xs font-mono text-on-surface-variant uppercase tracking-widest">OR</span>
+                <div className="h-[1px] bg-outline-variant/30 flex-1"></div>
+              </div>
+
+              <div>
+                <label className="block font-label-md text-xs uppercase tracking-widest text-on-surface-variant mb-2">
+                  Video Link (Direct URL or YouTube/Vimeo)
+                </label>
+                <input 
+                  type="url" 
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  className="w-full border border-outline bg-surface p-3 font-body-md focus:border-primary focus:outline-none text-sm rounded-xl"
+                />
+                <p className="text-[10px] text-on-surface-variant mt-1.5 leading-relaxed">
+                  You can paste a direct MP4 link, a YouTube video URL, or a Vimeo video URL. YouTube links will automatically play using our secure embeds.
+                </p>
+              </div>
+
+              <div>
+                <label className="block font-label-md text-xs uppercase tracking-widest text-on-surface-variant mb-2">
+                  Ad Title / Feature Label
+                </label>
+                <input 
+                  type="text" 
+                  required
+                  value={videoTitle}
+                  onChange={(e) => setVideoTitle(e.target.value)}
+                  placeholder="e.g. Handmade Silk Collection"
+                  className="w-full border border-outline bg-surface p-3 font-body-md focus:border-primary focus:outline-none text-sm rounded-xl"
+                />
+              </div>
+
+              <div>
+                <label className="block font-label-md text-xs uppercase tracking-widest text-on-surface-variant mb-2">
+                  Ad Story Description
+                </label>
+                <textarea 
+                  required
+                  value={videoDescription}
+                  onChange={(e) => setVideoDescription(e.target.value)}
+                  placeholder="Tell the artisan story behind this collection..."
+                  rows={4}
+                  className="w-full border border-outline bg-surface p-3 font-body-md focus:border-primary focus:outline-none text-sm rounded-xl resize-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-3 bg-surface p-4 rounded-xl border border-outline/10">
+                <input 
+                  type="checkbox"
+                  id="videoIsActive"
+                  checked={videoIsActive}
+                  onChange={(e) => setVideoIsActive(e.target.checked)}
+                  className="w-4 h-4 rounded border-outline text-primary focus:ring-primary cursor-pointer"
+                />
+                <label htmlFor="videoIsActive" className="font-label-md text-xs uppercase tracking-widest text-on-surface cursor-pointer select-none">
+                  Make Promotional Video Live on Storefront
+                </label>
+              </div>
+
+              <button 
+                type="submit"
+                disabled={loading || uploading}
+                className="w-full bg-primary text-on-primary py-3.5 uppercase tracking-widest font-label-md hover:bg-primary/90 transition-colors rounded-xl flex items-center justify-center gap-2 text-sm"
+              >
+                <span className="material-symbols-outlined text-lg">save</span>
+                {loading ? 'Saving Settings...' : 'Save Video Settings'}
+              </button>
+            </form>
+
+            {/* Right side real-time live preview */}
+            <div className="lg:col-span-2 space-y-6">
+              <h3 className="font-label-md text-xs uppercase tracking-widest text-on-surface-variant border-b border-outline-variant/30 pb-2">
+                Live Storefront Preview
+              </h3>
+
+              {videoUrl ? (
+                <div className="border border-outline bg-black rounded-2xl overflow-hidden aspect-video relative group shadow-lg flex items-center justify-center">
+                  {videoUrl.includes('.mp4') || videoUrl.startsWith('data:video/') ? (
+                    <video 
+                      src={videoUrl} 
+                      className="w-full h-full object-contain"
+                      controls
+                    />
+                  ) : videoUrl.includes('youtube.com') || videoUrl.includes('youtu.be') ? (
+                    <div className="w-full h-full bg-cover bg-center bg-[url('https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=400&auto=format&fit=crop')] flex flex-col items-center justify-center text-white p-4">
+                      <span className="material-symbols-outlined text-4xl mb-2 text-red-600">play_circle</span>
+                      <span className="text-xs font-semibold uppercase tracking-widest bg-black/60 px-3 py-1 rounded">YouTube Integration</span>
+                    </div>
+                  ) : (
+                    <div className="w-full h-full bg-cover bg-center bg-[url('https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=400&auto=format&fit=crop')] flex flex-col items-center justify-center text-white p-4">
+                      <span className="material-symbols-outlined text-4xl mb-2">play_circle</span>
+                      <span className="text-xs font-semibold uppercase tracking-widest bg-black/60 px-3 py-1 rounded">External Video Link</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="border border-dashed border-outline-variant bg-surface-container-low rounded-2xl aspect-video flex flex-col items-center justify-center p-6 text-center text-on-surface-variant">
+                  <span className="material-symbols-outlined text-3xl mb-2">video_library</span>
+                  <span className="text-xs font-semibold uppercase tracking-widest">No Video Configured</span>
+                  <p className="text-[10px] mt-1">Upload a video file or enter a link to preview here</p>
+                </div>
+              )}
+
+              {/* Mock of storefront float bubble */}
+              <div className="border border-outline/10 bg-surface rounded-2xl p-4 shadow-sm space-y-3">
+                <span className="text-[10px] font-mono text-on-surface-variant uppercase tracking-widest">Widget mockup:</span>
+                <div className="flex items-center gap-3">
+                  <div className="w-14 h-14 rounded-full border-2 border-primary overflow-hidden relative bg-black flex items-center justify-center shadow-md animate-pulse">
+                    {videoUrl && (videoUrl.includes('.mp4') || videoUrl.startsWith('data:video/')) ? (
+                      <video src={videoUrl} className="w-full h-full object-cover" muted playsInline />
+                    ) : (
+                      <div className="w-full h-full bg-cover bg-center bg-[url('https://images.unsplash.com/photo-1544816155-12df9643f363?q=80&w=100&auto=format&fit=crop')]" />
+                    )}
+                    <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-white text-lg">play_arrow</span>
+                    </div>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-xs text-on-surface truncate max-w-[150px]">{videoTitle || 'Artisan Story'}</h4>
+                    <p className="text-[10px] text-on-surface-variant truncate max-w-[150px]">{videoDescription || 'Discover premium collections'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       ) : null}
